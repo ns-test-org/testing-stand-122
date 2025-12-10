@@ -1,84 +1,252 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
-const slogans = [
-  "Turn chats into apps",
-  "Prompt. Ship. Repeat.",
-  "Build anything from a chat",
-  "Ideas → Apps, instantly",
-  "From zero to MVP in minutes",
-  "Your cofounder in the command line",
-  "Draft, iterate, deploy",
-  "Ship faster than you can type",
-  "Design in text, deliver in code",
-  "Dream it. Prompt it. Run it.",
-  "Chat-native app building",
-  "From prompt to product",
-  "One prompt, infinite apps",
-  "Stop scaffolding. Start shipping.",
-  "Prototype at the speed of thought",
-  "Make conversations executable"
-];
+type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+type Position = { x: number; y: number };
 
-export default function Landing() {
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isVisible, setIsVisible] = useState(true);
+const GRID_SIZE = 20;
+const INITIAL_SPEED = 150;
+
+export default function PacManGame() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [score, setScore] = useState(0);
+  const [gameOver, setGameOver] = useState(false);
+  const [gameStarted, setGameStarted] = useState(false);
+  
+  const pacmanRef = useRef<Position>({ x: 10, y: 10 });
+  const directionRef = useRef<Direction>('RIGHT');
+  const nextDirectionRef = useRef<Direction>('RIGHT');
+  const dotsRef = useRef<boolean[][]>([]);
+  const ghostsRef = useRef<Position[]>([
+    { x: 5, y: 5 },
+    { x: 15, y: 5 },
+    { x: 5, y: 15 },
+    { x: 15, y: 15 }
+  ]);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setIsVisible(false);
-      setTimeout(() => {
-        setCurrentIndex((prev) => (prev + 1) % slogans.length);
-        setIsVisible(true);
-      }, 400);
-    }, 2800);
-
-    return () => clearInterval(interval);
+    // Initialize dots grid
+    const dots: boolean[][] = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      dots[y] = [];
+      for (let x = 0; x < GRID_SIZE; x++) {
+        dots[y][x] = true;
+      }
+    }
+    dotsRef.current = dots;
   }, []);
 
-  return (
-    <div className="relative h-[100dvh] w-full overflow-hidden bg-black text-white">
-      {/* Enhanced animated aurora background layers */}
-      <div className="absolute inset-0 bg-aurora-layer-1" />
-      <div className="absolute inset-0 bg-aurora-layer-2" />
-      <div className="absolute inset-0 bg-aurora-layer-3" />
-      
-      {/* Floating particles overlay */}
-      <div className="absolute inset-0 bg-particles" />
-      
-      {/* Main content - centered */}
-      <main className="relative z-10 h-full flex flex-col items-center justify-center px-6">
-        <h1 className="text-center text-[clamp(28px,6vw,64px)] font-medium tracking-tight mb-4">
-          Turn Chats into Apps
-        </h1>
+  useEffect(() => {
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if (!gameStarted && (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
+        setGameStarted(true);
+      }
+
+      switch (e.key) {
+        case 'ArrowUp':
+          nextDirectionRef.current = 'UP';
+          break;
+        case 'ArrowDown':
+          nextDirectionRef.current = 'DOWN';
+          break;
+        case 'ArrowLeft':
+          nextDirectionRef.current = 'LEFT';
+          break;
+        case 'ArrowRight':
+          nextDirectionRef.current = 'RIGHT';
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, [gameStarted]);
+
+  useEffect(() => {
+    if (!gameStarted || gameOver) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const cellSize = canvas.width / GRID_SIZE;
+
+    const gameLoop = setInterval(() => {
+      // Update direction
+      directionRef.current = nextDirectionRef.current;
+
+      // Move Pac-Man
+      const newPos = { ...pacmanRef.current };
+      switch (directionRef.current) {
+        case 'UP':
+          newPos.y = (newPos.y - 1 + GRID_SIZE) % GRID_SIZE;
+          break;
+        case 'DOWN':
+          newPos.y = (newPos.y + 1) % GRID_SIZE;
+          break;
+        case 'LEFT':
+          newPos.x = (newPos.x - 1 + GRID_SIZE) % GRID_SIZE;
+          break;
+        case 'RIGHT':
+          newPos.x = (newPos.x + 1) % GRID_SIZE;
+          break;
+      }
+      pacmanRef.current = newPos;
+
+      // Check collision with ghosts
+      for (const ghost of ghostsRef.current) {
+        if (ghost.x === newPos.x && ghost.y === newPos.y) {
+          setGameOver(true);
+          return;
+        }
+      }
+
+      // Eat dot
+      if (dotsRef.current[newPos.y]?.[newPos.x]) {
+        dotsRef.current[newPos.y][newPos.x] = false;
+        setScore(prev => prev + 10);
+      }
+
+      // Move ghosts randomly
+      ghostsRef.current = ghostsRef.current.map(ghost => {
+        const directions: Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+        const randomDir = directions[Math.floor(Math.random() * directions.length)];
+        const newGhost = { ...ghost };
         
-        {/* Rotating slogans */}
-        <div className="mt-4 h-8 md:h-10 overflow-hidden flex items-center justify-center">
-          <span
-            className={`inline-block text-center text-[clamp(18px,3vw,32px)] font-light transition-all duration-[400ms] ease-in-out ${
-              isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'
-            }`}
-          >
-            {slogans[currentIndex]}
-          </span>
-        </div>
-      </main>
+        switch (randomDir) {
+          case 'UP':
+            newGhost.y = (newGhost.y - 1 + GRID_SIZE) % GRID_SIZE;
+            break;
+          case 'DOWN':
+            newGhost.y = (newGhost.y + 1) % GRID_SIZE;
+            break;
+          case 'LEFT':
+            newGhost.x = (newGhost.x - 1 + GRID_SIZE) % GRID_SIZE;
+            break;
+          case 'RIGHT':
+            newGhost.x = (newGhost.x + 1) % GRID_SIZE;
+            break;
+        }
+        return newGhost;
+      });
+
+      // Draw
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw dots
+      ctx.fillStyle = '#fff';
+      for (let y = 0; y < GRID_SIZE; y++) {
+        for (let x = 0; x < GRID_SIZE; x++) {
+          if (dotsRef.current[y]?.[x]) {
+            ctx.beginPath();
+            ctx.arc(
+              x * cellSize + cellSize / 2,
+              y * cellSize + cellSize / 2,
+              2,
+              0,
+              Math.PI * 2
+            );
+            ctx.fill();
+          }
+        }
+      }
+
+      // Draw Pac-Man
+      ctx.fillStyle = '#ffff00';
+      ctx.beginPath();
+      ctx.arc(
+        pacmanRef.current.x * cellSize + cellSize / 2,
+        pacmanRef.current.y * cellSize + cellSize / 2,
+        cellSize / 2 - 2,
+        0.2 * Math.PI,
+        1.8 * Math.PI
+      );
+      ctx.lineTo(
+        pacmanRef.current.x * cellSize + cellSize / 2,
+        pacmanRef.current.y * cellSize + cellSize / 2
+      );
+      ctx.fill();
+
+      // Draw ghosts
+      const ghostColors = ['#ff0000', '#00ffff', '#ffb8ff', '#ffb852'];
+      ghostsRef.current.forEach((ghost, i) => {
+        ctx.fillStyle = ghostColors[i];
+        ctx.beginPath();
+        ctx.arc(
+          ghost.x * cellSize + cellSize / 2,
+          ghost.y * cellSize + cellSize / 2,
+          cellSize / 2 - 2,
+          0,
+          Math.PI * 2
+        );
+        ctx.fill();
+      });
+    }, INITIAL_SPEED);
+
+    return () => clearInterval(gameLoop);
+  }, [gameStarted, gameOver]);
+
+  const resetGame = () => {
+    pacmanRef.current = { x: 10, y: 10 };
+    directionRef.current = 'RIGHT';
+    nextDirectionRef.current = 'RIGHT';
+    ghostsRef.current = [
+      { x: 5, y: 5 },
+      { x: 15, y: 5 },
+      { x: 5, y: 15 },
+      { x: 15, y: 15 }
+    ];
+    
+    const dots: boolean[][] = [];
+    for (let y = 0; y < GRID_SIZE; y++) {
+      dots[y] = [];
+      for (let x = 0; x < GRID_SIZE; x++) {
+        dots[y][x] = true;
+      }
+    }
+    dotsRef.current = dots;
+    
+    setScore(0);
+    setGameOver(false);
+    setGameStarted(false);
+  };
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-black text-white p-4">
+      <h1 className="text-4xl font-bold mb-4">PAC-MAN</h1>
+      <div className="mb-4 text-2xl">Score: {score}</div>
       
-      {/* Start Prompting arrow pointing left - bottom left */}
-      <div className="absolute left-6 md:left-8 bottom-[5%] z-20 flex items-center gap-3 arrow-point-left">
-        <div className="flex items-center gap-2 text-white/80 font-medium text-sm md:text-base">
-          <svg 
-            className="w-5 h-5 md:w-6 md:h-6 animate-bounce-horizontal" 
-            fill="none" 
-            viewBox="0 0 24 24" 
-            stroke="currentColor"
+      <canvas
+        ref={canvasRef}
+        width={600}
+        height={600}
+        className="border-4 border-blue-500 mb-4"
+      />
+      
+      {!gameStarted && !gameOver && (
+        <div className="text-xl">Press arrow keys to start!</div>
+      )}
+      
+      {gameOver && (
+        <div className="text-center">
+          <div className="text-3xl text-red-500 mb-4">GAME OVER!</div>
+          <button
+            onClick={resetGame}
+            className="px-6 py-3 bg-yellow-500 text-black font-bold rounded hover:bg-yellow-400"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-          </svg>
-          <span>Start prompting</span>
+            Play Again
+          </button>
         </div>
+      )}
+      
+      <div className="mt-4 text-center text-sm text-gray-400">
+        Use arrow keys to move • Avoid the ghosts • Eat all the dots
       </div>
     </div>
   );
 }
+
